@@ -29,7 +29,8 @@ for y in range(len(lines)):
             low_risks.append(count(map, set([(y,x)]), 0))
 
 import functools
-print(functools.reduce(lambda x,y: x*y, sorted(low_risks)[-3:] ))
+a = sorted(low_risks)[-3:]
+print(a[0]*a[1]*a[2])
 
 #changing = True
 #while changing:
