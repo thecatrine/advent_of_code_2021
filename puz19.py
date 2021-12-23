@@ -10,23 +10,16 @@ for line in lines:
         scanners.append([])
     else:
         x, y, z = [int(x) for x in line.split(',')]
-        scanners[-1].append(np.array([x, y, z]))
+        scanners[-1].append((x, y, z))
 
 
 for i in range(len(scanners)):
-    scanners[i] = np.array(scanners[i])
-
-
-map = []
-
-# assume scanner 0 has the right coordinate system
-for pt in scanners[0]:
-    map.append(tuple(pt))
+    scanners[i] = set(scanners[i])
 
 
 def all_pos(pt):
     rotated = []
-    swaps = [[0, 1, 2], [1, 2, 0], [2, 0, 1]]
+    swaps = [[0, 1, 2], [1, 2, 0], [2, 0, 1], [0, 2, 1], [1, 0, 2], [2, 1, 0]]
     # axis can be swapped
     for swap in swaps:
         new_pt = [pt[i] for i in swap]
@@ -42,6 +35,9 @@ def all_pos(pt):
 
     return flipped
 
+testcase = set(all_pos((1,2,3)))
+print(testcase)
+
 def meta_pos(bunch):
     return [all_pos(pt) for pt in bunch]
 
@@ -52,16 +48,22 @@ def offset(universe, diff):
     return res
 
 
-remaining_scanners = scanners
+
 
 #remaining_scanners = [[(1,2,3), (2,3,4), (3,4,5)]]
 #map = set([(0, 1, 2), (102, 103, 104), (101, 102, 103)])
 
 CONFIRM_THRESHOLD = 12
+import random
 
-while len(remaining_scanners) > 0:
-    map = remaining_scanners.pop()
-    next_scanner = remaining_scanners.pop()
+remaining_scanners = [scanners[x] for x in [0, 1, 4, 3, 2]]
+
+while len(remaining_scanners) > 1:
+    # So we don't have to keep track of which scanner we're on
+    #random.shuffle(remaining_scanners)
+
+    map = remaining_scanners.pop(0)
+    next_scanner = remaining_scanners.pop(0)
 
     all_universes = meta_pos(next_scanner)
     num_universes = 24 # RSI is this always 24?
@@ -87,15 +89,17 @@ while len(remaining_scanners) > 0:
                 #print("Potential points:", potential_points)
                 intersection = map.intersection(set(potential_points))
                 if len(intersection) >= CONFIRM_THRESHOLD:
-                    print("FOUND OVERLAP")
+                    print("FOUND OVERLAP at offset", diff)
+                    map |= set(potential_points)
+                    print("New map:", len(map))
+                    remaining_scanners = [map] + remaining_scanners
+
                     searching = False
-                    for found_pt in potential_points:
-                        map.add(found_pt)
                     break
 
     if searching == True:
         print("NO OVERLAP")
-        remaining_scanners = [next_scanner] + remaining_scanners
+        remaining_scanners += [map, next_scanner]
 
         
         #import pdb; pdb.set_trace()
