@@ -5,25 +5,27 @@ Y, X = len(lines), len(lines[0])
 
 #map = dict([[(y,x), int(lines[y][x])] for y in range(Y) for x in range(X)])
 
-map = [[x for x in line] for line in lines]
+map = [[x if x in ['A', 'B', 'C', 'D', '.'] else None for x in line] for line in lines]
 
+mmap = {}
+places_to_consider = []
+for y in range(Y):
+    for x in range(X):
+        if map[y][x] in ['A', 'B', 'C', 'D', '.']:
+            mmap[(y,x)] = map[y][x]
+            places_to_consider.append((y,x))
 
-def can_reach(pos):
-    y, x = pos
-    if y == 1 and x > 0 and x < len(map[0])-1:
-        return True # top line in hallway
-    if x in [3, 5, 7, 9] and y in [2, 3]:
-        return True # in a room
 
 costs = {'A': 1, 'B': 10, 'C': 100, 'D': 1000}
 rooms = {'A': 3, 'B': 5, 'C': 7, 'D': 9}
 
+
 import copy
 def attempt_move(pair, pos1, pos2):
     global rooms
-    map, existing_cost = pair
+    existing_cost, map = pair.priority, pair.item
 
-    char = map[pos1[0]][pos1[1]]
+    char = map[pos1]
     cost = 0
     per = costs[char]
 
@@ -41,7 +43,7 @@ def attempt_move(pair, pos1, pos2):
         if tpos[0] == HALL:
             needs_hall = False
 
-        if needs_hall:
+        if needs_hall or tpos[0] > pos2[0]:
             #print('up')
             att = (tpos[0]-1, tpos[1])
         elif tpos[1] > pos2[1]:
@@ -53,9 +55,11 @@ def attempt_move(pair, pos1, pos2):
         elif tpos[0] < pos2[0]:
             #print('down')
             att = (tpos[0]+1, tpos[1])
+        else:
+            import pdb; pdb.set_trace()
         cost += per
 
-        if map[att[0]][att[1]] == '.':
+        if map[att] == '.':
             tpos = att
         else:
             #import pdb; pdb.set_trace()
@@ -63,47 +67,61 @@ def attempt_move(pair, pos1, pos2):
             return False, None
     
     new_map = copy.deepcopy(map)
-    new_map[pos1[0]][pos1[1]] = '.'
-    new_map[pos2[0]][pos2[1]] = char
+    new_map[pos1] = '.'
+    new_map[pos2] = char
 
-    return True, (new_map, cost+existing_cost)
+    return True, Group(cost+existing_cost, new_map)
 
 HALL = 1
 HOME_TOP = 2
-HOME_BOT = 3
-VALID_STOPS = [1,2,4,6,8,10,11]
+HOME_BOT = Y - 2
+VALID_STOPS = [1,2,  4,  6,  8,  10,11]
 
 def possible_moves(pair, pos):
-    map, _ = pair
-    char = map[pos[0]][pos[1]]
+    _, map = pair.priority, pair.item
+    char = map[pos]
     moves = []
 
     #print("considering move for char", char, 'at', pos)
 
+    #if pos == (1, 10):
+        #import pdb; pdb.set_trace()
+
+
     if pos[0] == HALL:
         # on top line, only consider moving back to correct room
         home = rooms[char]
-        if map[HOME_BOT][home] == '.':
-            can, new_pair = attempt_move(pair, pos, (HOME_BOT, home))
-            if can:
-                moves.append(new_pair)
-        elif map[HOME_TOP][home] == '.' and map[HOME_BOT][home] == char:
-            can, new_pair = attempt_move(pair, pos, (HOME_TOP, home))
-            if can:
-                moves.append(new_pair)
-    elif pos[0] == HOME_TOP or (pos[0] == HOME_BOT and map[HOME_TOP][pos[0]] == '.'):
-        # consider moving out of room if not in home
-        safe = False
+        for y in range(HOME_BOT, HOME_TOP-1, -1):
+            #print(y, home)
+            if map[(y,home)] == '.':
+                can, new_pair = attempt_move(pair, pos, (y, home))
+                if can:
+                    moves.append(new_pair)
+                break
+            elif map[(y, home)] == char:
+                continue
+            else:
+                break
+    else:
+        # try to move if not safe
         home = rooms[char]
-        if pos[1] == rooms[char]:
-            if pos[0] == HOME_BOT:
-                safe = True
-            if pos[0] == HOME_TOP and map[HOME_BOT][home] == char:
-                safe = True
+        safe = pos[1] == home
+    
+        for y in range(pos[0], HOME_BOT+1):
+            if map[(y, home)] != char:
+                safe = False
+                break
+        
+#        if safe:
+#            print("safe")
+#            import pdb; pdb.set_trace()
 
         if not safe:
-            spots_to_attempt = [(HALL, x) for x in VALID_STOPS] + [(HOME_BOT, home), (HOME_TOP, home)]
+            #print("home places", home_places)
+            spots_to_attempt = [(HALL, x) for x in VALID_STOPS]
             for spot in spots_to_attempt:
+                #if pos == (3, 5) and spot == (1, 6):
+                #    import pdb; pdb.set_trace()
                 can, new_pair = attempt_move(pair, pos, spot)
                 if can:
                     moves.append(new_pair)
@@ -116,75 +134,102 @@ def possible_moves(pair, pos):
 
 
 def all_possible_moves(pair):
-    map, _ = pair
+    _, map = pair.priority, pair.item
     all_poss = []
-    for y in range(len(map)):
-        for x in range(len(map[0])):
-            if map[y][x] in ['A', 'B', 'C', 'D']:
-                #print("possible move at", (y, x))
-                possibles = possible_moves(pair, (y, x))
+    for spot in places_to_consider:
+        if map[spot] in ['A', 'B', 'C', 'D']:
+            possibles = possible_moves(pair, spot)
 
-                #print(len(possibles))
-                all_poss += possibles
+            #print(len(possibles))
+            all_poss += possibles
 
     return all_poss
 
 def print_map(map):
-    for line in map:
-        print(''.join(line))
+    for y in range(Y):
+        line = ''
+        for x in range(X):
+            c = map.get((y, x), '#')
+            line += c
+        print(line)
 
 
 def check_win(map):
     for char in ['A', 'B', 'C', 'D']:
-        if map[HOME_TOP][rooms[char]] != char:
-            return False
-        if map[HOME_BOT][rooms[char]] != char:
-            return False
+        for y in range(HOME_TOP, HOME_BOT+1):
+            if map[(y, rooms[char])] != char:
+                return False
     return True
 
 
-def map_to_key(map):
-    return ''.join([x for line in map for x in line])
+def print_history(hist):
+    print("REPLAY")
+    for item in hist:
+        print("cost", item.priority)
+        print_map(item.item)
+        print()
+
+def key_from_map(map):
+    return str(map)
 
 cache = {}
 
+print_map(mmap)
 
-pair = (map, 0)
+import queue
+from dataclasses import dataclass, field
+from typing import Any
+
+@dataclass(order=True)
+class Group:
+    priority: int
+    item: Any=field(compare=False)
+
+pair = Group(0, mmap)
 wins = []
-possibles = [pair]
+possibles = queue.PriorityQueue()
+possibles.put(pair)
 i = 0
 min_cost = 100000
-while len(possibles) > 0:
+min_win = None
+while not possibles.empty():
     i+=1
-    pair = possibles.pop()
+    group = possibles.get()
+    pair = group
 
-    map, cost = pair
-    key = map_to_key(map)
+    cost, map = pair.priority, pair.item
+    key = key_from_map(map)
+
+    #import pdb; pdb.set_trace()
+
+    #if map == test_map:
+    #    import pdb; pdb.set_trace()
     if key in cache and cache[key] <= cost:
         continue
 
     cache[key] = cost
 
     #print_map(map)
-    if cost > 100000:
+    if cost > min(50000, min_cost):
         continue
+    #if len(group) > 100:
+    #    continue
 
     moves = all_possible_moves(pair)
     #import pdb; pdb.set_trace()
 
     for move in moves:
-        move_map = move[0]
+        new_group = move
+
+        move_map = move.item
         if check_win(move_map):
-            wins.append(move)
-            if move[1] < min_cost:
-                print("best win", move[1])
-                min_cost = move[1]
+            if move.priority < min_cost:
+                print("best win", move.priority)
+                min_cost = move.priority
+                min_win = new_group
         else:
-            possibles.append(move)
+            #print(move)
+            possibles.put(move)
 
     
-#print(wins)
-print(min_cost)
-#new_map, cost = new_pair
-#print_map(new_map)
-#print(cost)
+print_history(min_win)
